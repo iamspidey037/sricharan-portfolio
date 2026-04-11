@@ -1,196 +1,190 @@
-// app/(public)/projects/[slug]/page.tsx
-// Individual project detail page
-
-import { Metadata } from 'next';
-import { notFound } from 'next/navigation';
-import { connectDB } from '@/lib/db/mongoose';
-import Section from '@/models/Section';
-import Navbar from '@/components/public/layout/Navbar';
-import Footer from '@/components/public/layout/Footer';
-import SiteSettings from '@/models/SiteSettings';
-import { ArrowLeft, Github, ExternalLink, Cpu, Clock, Users, Tag } from 'lucide-react';
-import Link from 'next/link';
+import { Metadata } from "next";
+import { connectDB } from "@/lib/db/mongoose";
+import Section from "@/models/Section";
+import Navbar from "@/components/public/layout/Navbar";
+import Footer from "@/components/public/layout/Footer";
+import Link from "next/link";
+import { ArrowLeft, Github, ExternalLink, Calendar, Cpu, Target, Zap, Database } from "lucide-react";
+import { notFound } from "next/navigation";
 
 export const revalidate = 60;
-
-type Props = { params: { slug: string } };
+interface Props { params: { slug: string } }
 
 async function getProject(slug: string) {
-  await connectDB();
-  return Section.findOne({
-    slug,
-    visibility: 'public',
-    status: 'published',
-  })
-    .select('-versions -sharedLink')
-    .lean();
+  try {
+    await connectDB();
+    return await Section.findOne({ slug, visibility: "public", status: "published" }).lean();
+  } catch { return null; }
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const project = await getProject(params.slug);
-  if (!project) return { title: 'Project Not Found' };
+  if (!project) return { title: "Project Not Found" };
   const p = project as Record<string, unknown>;
-  return {
-    title: p.title as string,
-    description: (p.metaDescription as string) || (p.description as string),
-    openGraph: { images: p.ogImageUrl ? [p.ogImageUrl as string] : [] },
-  };
+  return { title: String(p.title ?? ""), description: String(p.description ?? "") };
 }
 
-export default async function ProjectDetailPage({ params }: Props) {
-  const [project, settings] = await Promise.all([
-    getProject(params.slug),
-    connectDB().then(() => SiteSettings.findOne().lean()),
-  ]);
-
+export default async function ProjectPage({ params }: Props) {
+  const project = await getProject(params.slug);
   if (!project) notFound();
   const p = project as Record<string, unknown>;
+
   const aiMetrics = p.aiMetrics as Record<string, unknown> | undefined;
-  const externalLinks = p.externalLinks as Array<{label: string; url: string; type: string}> | undefined;
-  const teamMembers = p.teamMembers as Array<{name: string; role: string; linkedinUrl?: string}> | undefined;
+  const externalLinks = (p.externalLinks as Array<{ label: string; url: string; type: string }>) || [];
+  const techStack = (p.techStack as string[]) || [];
+  const hardwareComponents = (p.hardwareComponents as string[]) || [];
+  const keyLearnings = (p.keyLearnings as string[]) || [];
+  const tags = (p.tags as string[]) || [];
+
+  const icon = p.icon ? String(p.icon) : null;
+  const title = String(p.title ?? "");
+  const description = p.description ? String(p.description) : null;
+  const content = p.content ? String(p.content) : null;
+  const challenges = p.challenges ? String(p.challenges) : null;
+
+  const STATUS_MAP: Record<string, { label: string; cls: string }> = {
+    completed:   { label: "✅ Completed",   cls: "badge-completed" },
+    in_progress: { label: "🔄 In Progress", cls: "badge-in-progress" },
+    planned:     { label: "📋 Planned",     cls: "badge-planned" },
+    on_hold:     { label: "⏸️ On Hold",     cls: "badge-planned" },
+  };
+  const statusInfo = STATUS_MAP[String(p.projectStatus ?? "")] ?? null;
 
   return (
     <>
-      <Navbar settings={settings as Record<string, unknown>} />
-      <main className="bg-circuit min-h-screen pt-20 pb-16 px-4">
+      <Navbar settings={null} />
+      <main className="bg-circuit min-h-screen pt-24 pb-20 px-4">
         <div className="max-w-content mx-auto">
-          {/* Breadcrumb */}
-          <div className="mb-8 flex items-center gap-2 text-sm text-text-muted">
-            <Link href="/#projects" className="hover:text-primary transition-colors flex items-center gap-1">
-              <ArrowLeft size={14} /> Projects
-            </Link>
-            <span>/</span>
-            <span className="text-text-primary">{p.title as string}</span>
-          </div>
-
+          <Link href="/#projects" className="inline-flex items-center gap-2 text-text-muted hover:text-primary transition-colors text-sm mb-8">
+            <ArrowLeft size={15} /> Back to Projects
+          </Link>
           <div className="grid lg:grid-cols-3 gap-8">
-            {/* Main content */}
             <div className="lg:col-span-2 space-y-6">
-              {/* Header */}
               <div>
-                <div className="flex flex-wrap items-center gap-3 mb-2">
-                  {p.icon && <span className="text-3xl">{p.icon as string}</span>}
-                  {p.projectStatus && (
-                    <span className={`text-xs px-3 py-1 rounded-full font-mono font-medium
-                      ${p.projectStatus === 'completed' ? 'badge-completed' :
-                        p.projectStatus === 'in_progress' ? 'badge-in-progress' : 'badge-planned'}`}>
-                      {p.projectStatus === 'completed' ? '✅ Completed' :
-                       p.projectStatus === 'in_progress' ? '🔄 In Progress' : '📋 Planned'}
+                {icon && <span className="text-3xl mb-3 block">{icon}</span>}
+                <h1 className="font-heading font-black text-3xl text-text-primary mb-3">{title}</h1>
+                {description && <p className="text-text-secondary text-lg">{description}</p>}
+                <div className="flex flex-wrap gap-3 mt-4">
+                  {statusInfo && (
+                    <span className={`text-sm px-3 py-1 rounded-full font-mono font-medium ${statusInfo.cls}`}>
+                      {statusInfo.label}
                     </span>
                   )}
-                  {aiMetrics && (
-                    <span className="text-xs px-3 py-1 rounded-full bg-accent/10 border border-accent/30 text-accent font-mono flex items-center gap-1">
-                      <Cpu size={10} /> AI/ML Project
+                  {p.startDate && (
+                    <span className="flex items-center gap-1.5 text-sm text-text-muted">
+                      <Calendar size={13} />
+                      {new Date(String(p.startDate)).toLocaleDateString("en-US", { month: "short", year: "numeric" })}
                     </span>
                   )}
                 </div>
-                <h1 className="font-heading font-black text-3xl md:text-4xl text-text-primary mb-3">
-                  {p.title as string}
-                </h1>
-                {p.description && (
-                  <p className="text-text-secondary text-lg leading-relaxed">{p.description as string}</p>
-                )}
               </div>
 
-              {/* AI Metrics */}
               {aiMetrics && (
-                <div className="card p-5">
-                  <h2 className="font-heading font-semibold text-text-primary mb-4 flex items-center gap-2">
-                    <Cpu size={16} className="text-accent" /> AI/ML Performance Metrics
-                  </h2>
+                <div className="card p-6">
+                  <h3 className="font-heading font-bold text-text-primary mb-4 flex items-center gap-2">
+                    <Cpu size={16} className="text-primary" /> AI / ML Metrics
+                  </h3>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    {[
-                      { label: 'Accuracy', value: `${aiMetrics.accuracy}%`, color: '#00FF88' },
-                      { label: 'Model Size', value: `${aiMetrics.modelSizeKB}KB`, color: '#00D4FF' },
-                      { label: 'Inference', value: `${aiMetrics.inferenceTimeMs}ms`, color: '#FF6B35' },
-                      { label: 'Framework', value: aiMetrics.framework as string, color: '#FFD60A' },
-                    ].filter(m => m.value && m.value !== 'undefinedms' && m.value !== 'undefined%').map(m => (
-                      <div key={m.label} className="text-center p-3 bg-surface-2 rounded-lg">
-                        <div className="text-lg font-heading font-bold" style={{ color: m.color }}>{m.value}</div>
-                        <div className="text-xs text-text-muted mt-1">{m.label}</div>
+                    {aiMetrics.accuracy && (
+                      <div className="card p-3 text-center">
+                        <Target size={16} className="text-secondary mx-auto mb-1" />
+                        <div className="text-xl font-heading font-black text-secondary">{Number(aiMetrics.accuracy)}%</div>
+                        <div className="text-xs text-text-muted">Accuracy</div>
                       </div>
-                    ))}
+                    )}
+                    {aiMetrics.inferenceTimeMs && (
+                      <div className="card p-3 text-center">
+                        <Zap size={16} className="text-primary mx-auto mb-1" />
+                        <div className="text-xl font-heading font-black text-primary">{Number(aiMetrics.inferenceTimeMs)}ms</div>
+                        <div className="text-xs text-text-muted">Inference</div>
+                      </div>
+                    )}
+                    {aiMetrics.modelSizeKB && (
+                      <div className="card p-3 text-center">
+                        <Database size={16} className="text-accent mx-auto mb-1" />
+                        <div className="text-xl font-heading font-black text-accent">{Number(aiMetrics.modelSizeKB)}KB</div>
+                        <div className="text-xs text-text-muted">Model Size</div>
+                      </div>
+                    )}
+                    {aiMetrics.f1Score && (
+                      <div className="card p-3 text-center">
+                        <Target size={16} className="text-warning mx-auto mb-1" />
+                        <div className="text-xl font-heading font-black text-warning">{Number(aiMetrics.f1Score)}%</div>
+                        <div className="text-xs text-text-muted">F1 Score</div>
+                      </div>
+                    )}
                   </div>
-                  {aiMetrics.targetHardware && (
-                    <p className="text-xs text-text-muted mt-3">
-                      🎯 Target hardware: <span className="text-primary font-mono">{aiMetrics.targetHardware as string}</span>
-                    </p>
-                  )}
                 </div>
               )}
 
-              {/* Rich text content */}
-              {p.content && (
-                <div
-                  className="card p-6 prose prose-invert max-w-none"
-                  dangerouslySetInnerHTML={{ __html: p.content as string }}
-                />
+              {content && (
+                <div className="card p-6">
+                  <div className="prose prose-invert max-w-none text-text-secondary" dangerouslySetInnerHTML={{ __html: content }} />
+                </div>
+              )}
+
+              {keyLearnings.length > 0 && (
+                <div className="card p-6">
+                  <h3 className="font-heading font-bold text-text-primary mb-4">💡 Key Learnings</h3>
+                  <ul className="space-y-2">
+                    {keyLearnings.map((item, i) => (
+                      <li key={i} className="flex items-start gap-2 text-text-secondary text-sm">
+                        <span className="text-secondary mt-0.5 flex-shrink-0">→</span>{item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {challenges && (
+                <div className="card p-6">
+                  <h3 className="font-heading font-bold text-text-primary mb-3">⚡ Challenges</h3>
+                  <p className="text-text-secondary text-sm leading-relaxed">{challenges}</p>
+                </div>
               )}
             </div>
 
-            {/* Sidebar */}
             <div className="space-y-4">
-              {/* Tech stack */}
-              {Array.isArray(p.techStack) && (p.techStack as string[]).length > 0 && (
+              {externalLinks.length > 0 && (
                 <div className="card p-4">
-                  <h3 className="font-heading font-semibold text-text-primary mb-3 flex items-center gap-2">
-                    <Tag size={14} className="text-primary" /> Tech Stack
-                  </h3>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(p.techStack as string[]).map(t => (
-                      <span key={t} className="tech-chip">{t}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* External links */}
-              {externalLinks && externalLinks.length > 0 && (
-                <div className="card p-4">
-                  <h3 className="font-heading font-semibold text-text-primary mb-3">Links</h3>
+                  <h3 className="font-heading font-semibold text-text-primary text-sm mb-3">Links</h3>
                   <div className="space-y-2">
-                    {externalLinks.map(link => (
+                    {externalLinks.map((link) => (
                       <a key={link.url} href={link.url} target="_blank" rel="noopener noreferrer"
                         className="flex items-center gap-2 text-sm text-text-secondary hover:text-primary transition-colors">
-                        {link.type === 'github' ? <Github size={14} /> : <ExternalLink size={14} />}
+                        {link.type === "github" ? <Github size={14} /> : <ExternalLink size={14} />}
                         {link.label}
                       </a>
                     ))}
                   </div>
                 </div>
               )}
-
-              {/* Team */}
-              {teamMembers && teamMembers.length > 0 && (
+              {techStack.length > 0 && (
                 <div className="card p-4">
-                  <h3 className="font-heading font-semibold text-text-primary mb-3 flex items-center gap-2">
-                    <Users size={14} className="text-secondary" /> Team
-                  </h3>
-                  <div className="space-y-2">
-                    {teamMembers.map(m => (
-                      <div key={m.name} className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
-                          {m.name[0]}
-                        </div>
-                        <div>
-                          <p className="text-sm text-text-primary">{m.name}</p>
-                          <p className="text-xs text-text-muted">{m.role}</p>
-                        </div>
-                      </div>
-                    ))}
+                  <h3 className="font-heading font-semibold text-text-primary text-sm mb-3">Tech Stack</h3>
+                  <div className="flex flex-wrap gap-1.5">
+                    {techStack.map(t => <span key={t} className="tech-chip">{t}</span>)}
                   </div>
                 </div>
               )}
-
-              {/* Tags */}
-              {Array.isArray(p.tags) && (p.tags as string[]).length > 0 && (
+              {hardwareComponents.length > 0 && (
                 <div className="card p-4">
-                  <h3 className="font-heading font-semibold text-text-primary mb-3">Tags</h3>
+                  <h3 className="font-heading font-semibold text-text-primary text-sm mb-3">Hardware</h3>
+                  <ul className="space-y-1">
+                    {hardwareComponents.map(h => (
+                      <li key={h} className="text-sm text-text-secondary flex items-center gap-1.5">
+                        <span className="w-1 h-1 rounded-full bg-primary flex-shrink-0" />{h}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {tags.length > 0 && (
+                <div className="card p-4">
+                  <h3 className="font-heading font-semibold text-text-primary text-sm mb-3">Tags</h3>
                   <div className="flex flex-wrap gap-1.5">
-                    {(p.tags as string[]).map(t => (
-                      <span key={t} className="text-xs px-2 py-0.5 rounded-full bg-surface-2 border border-border text-text-muted">
-                        #{t}
-                      </span>
+                    {tags.map(t => (
+                      <span key={t} className="text-xs px-2 py-0.5 rounded-full bg-surface-2 border border-border text-text-muted">#{t}</span>
                     ))}
                   </div>
                 </div>
@@ -199,7 +193,7 @@ export default async function ProjectDetailPage({ params }: Props) {
           </div>
         </div>
       </main>
-      <Footer settings={settings as Record<string, unknown>} />
+      <Footer settings={null} />
     </>
   );
 }
